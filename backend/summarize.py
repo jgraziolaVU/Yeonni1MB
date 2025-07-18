@@ -1,10 +1,20 @@
 import os
 from typing import List, Dict, Any
-import openai
+import pandas as pd
 from dataclasses import dataclass
+import anthropic
 
-# Initialize OpenAI client
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# Global variable to store the API key
+_anthropic_client = None
+
+def get_anthropic_client():
+    """Get or create Anthropic client with API key"""
+    global _anthropic_client
+    if _anthropic_client is None:
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if api_key:
+            _anthropic_client = anthropic.Anthropic(api_key=api_key)
+    return _anthropic_client
 
 @dataclass
 class InterpretationRule:
@@ -14,7 +24,8 @@ class InterpretationRule:
 
 class MossbauerInterpreter:
     def __init__(self, use_ai: bool = True):
-        self.use_ai = use_ai and openai.api_key is not None
+        client = get_anthropic_client()
+        self.use_ai = use_ai and client is not None
         self.rules = self._create_interpretation_rules()
     
     def _create_interpretation_rules(self) -> List[InterpretationRule]:
@@ -54,7 +65,11 @@ class MossbauerInterpreter:
             return self._generate_rule_based_summary(fit_results)
     
     def _generate_ai_summary(self, fit_results: Dict[str, Any]) -> str:
-        """Generate AI-powered interpretation"""
+        """Generate AI-powered interpretation using Claude 4 Sonnet"""
+        client = get_anthropic_client()
+        if not client:
+            raise Exception("Anthropic API key not set")
+            
         sites = fit_results.get('sites', [])
         
         # Prepare detailed prompt
@@ -83,17 +98,19 @@ Please provide:
 
 Write your response as a concise paragraph suitable for a research paper."""
 
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "You are a Mössbauer spectroscopy expert providing scientific analysis."},
-                {"role": "user", "content": prompt}
-            ],
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=400,
             temperature=0.3,
-            max_tokens=400
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
         )
         
-        return response.choices[0].message['content'].strip()
+        return message.content[0].text.strip()
     
     def _generate_rule_based_summary(self, fit_results: Dict[str, Any]) -> str:
         """Generate rule-based interpretation when AI is not available"""
