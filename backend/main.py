@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -11,7 +11,7 @@ from datetime import datetime
 import tempfile
 
 from fit_spectrum import process_spectrum
-from summarize import MossbauerInterpreter, generate_detailed_report
+from summarize import MossbauerInterpreter, generate_detailed_report, get_anthropic_client
 
 app = FastAPI(title="Mössbauer Spectrum Analyzer API", version="2.0.0")
 
@@ -57,6 +57,36 @@ async def root():
             "GET /health": "Health check"
         }
     }
+
+@app.post("/set-api-key")
+async def set_api_key(api_key: str = Form(...)):
+    """Set the Anthropic API key for the session"""
+    if not api_key or not api_key.startswith('sk-'):
+        raise HTTPException(400, "Invalid API key format")
+    
+    # Set the API key as environment variable for this session
+    os.environ["ANTHROPIC_API_KEY"] = api_key
+    
+    # Test the API key
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+        # Test with a simple message
+        client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=10,
+            messages=[{"role": "user", "content": "Test"}]
+        )
+        return {"success": True, "message": "API key set successfully"}
+    except Exception as e:
+        os.environ.pop("ANTHROPIC_API_KEY", None)
+        raise HTTPException(400, f"Invalid API key: {str(e)}")
+
+@app.get("/check-api-key")
+async def check_api_key():
+    """Check if API key is set"""
+    has_key = bool(os.getenv("ANTHROPIC_API_KEY"))
+    return {"has_api_key": has_key}
 
 @app.get("/health")
 async def health_check():
