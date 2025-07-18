@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
-import { Moon, Sun, Activity, AlertCircle, Loader2 } from 'lucide-react';
+import { Moon, Sun, Activity, AlertCircle, Loader2, Key } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 import clsx from 'clsx';
 
 import { FileUpload } from '../components/FileUpload';
 import { FittingOptions } from '../components/FittingOptions';
 import { ResultsView } from '../components/ResultsView';
+import { ApiKeyModal } from '../components/ApiKeyModal';
 import { api, AnalysisOptions, AnalysisResponse } from '../utils/api';
 
 export default function Home() {
@@ -16,6 +17,8 @@ export default function Home() {
   const [results, setResults] = useState<AnalysisResponse | null>(null);
   const [showOptions, setShowOptions] = useState(false);
   const [isHealthy, setIsHealthy] = useState(true);
+  const [hasApiKey, setHasApiKey] = useState(false);
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   
   const [analysisOptions, setAnalysisOptions] = useState<AnalysisOptions>({
     model_type: 'lorentzian',
@@ -23,9 +26,10 @@ export default function Home() {
     baseline_correction: true,
   });
 
-  // Check API health on mount
+  // Check API health and API key on mount
   useEffect(() => {
     api.checkHealth().then(setIsHealthy);
+    api.checkApiKey().then(setHasApiKey);
   }, []);
 
   // Apply dark mode class to body
@@ -41,6 +45,14 @@ export default function Home() {
     if (!file) {
       setSelectedFile(null);
       setResults(null);
+      return;
+    }
+
+    // Check if API key is set before analyzing
+    if (!hasApiKey) {
+      setSelectedFile(file);
+      setShowApiKeyModal(true);
+      toast.error('Please set your Anthropic API key first');
       return;
     }
 
@@ -62,6 +74,17 @@ export default function Home() {
       console.error('Analysis error:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSetApiKey = async (apiKey: string) => {
+    await api.setApiKey(apiKey);
+    setHasApiKey(true);
+    toast.success('API key set successfully!');
+    
+    // If there's a file waiting to be analyzed, analyze it now
+    if (selectedFile) {
+      await handleFileSelect(selectedFile);
     }
   };
 
@@ -100,6 +123,12 @@ export default function Home() {
           }}
         />
 
+        <ApiKeyModal
+          isOpen={showApiKeyModal}
+          onClose={() => setShowApiKeyModal(false)}
+          onSubmit={handleSetApiKey}
+        />
+
         {/* Header */}
         <header className="border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800/50 backdrop-blur-sm sticky top-0 z-10">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -117,6 +146,19 @@ export default function Home() {
               </div>
               
               <div className="flex items-center space-x-4">
+                {!hasApiKey && (
+                  <button
+                    onClick={() => setShowApiKeyModal(true)}
+                    className={clsx(
+                      'flex items-center px-3 py-1.5 rounded-lg text-sm font-medium',
+                      'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200',
+                      'hover:bg-yellow-200 dark:hover:bg-yellow-900/50 transition-colors'
+                    )}
+                  >
+                    <Key className="w-4 h-4 mr-1.5" />
+                    Set API Key
+                  </button>
+                )}
                 {!isHealthy && (
                   <div className="flex items-center text-yellow-600 dark:text-yellow-400 text-sm">
                     <AlertCircle className="w-4 h-4 mr-1" />
