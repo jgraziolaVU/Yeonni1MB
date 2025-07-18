@@ -89,6 +89,25 @@ class API {
     }
   }
 
+  async setApiKey(apiKey: string): Promise<void> {
+    const formData = new FormData();
+    formData.append('api_key', apiKey);
+    
+    const response = await this.client.post('/set-api-key', formData);
+    if (!response.data.success) {
+      throw new Error('Failed to set API key');
+    }
+  }
+
+  async checkApiKey(): Promise<boolean> {
+    try {
+      const response = await this.client.get('/check-api-key');
+      return response.data.has_api_key;
+    } catch {
+      return false;
+    }
+  }
+
   async checkHealth(): Promise<boolean> {
     try {
       const response = await this.client.get('/health');
